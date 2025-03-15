@@ -1,0 +1,23 @@
+// write script to make it fast or add in .zshrc/.bashrc
+export dr='--dry-run=client -o yaml'
+export now='--grace-period 0 --force'
+alias k=kubectl
+alias kn='k config set-context --current --namespace'
+alias kaf='k apply -f'
+alias kgp='k get po'
+alias kgs='k get svc'
+alias kc='k config get-contexts'
+alias kg='k get'
+alias ke='k explain --recursive'
+
+
+source ~/.bashrc => to apply the changes in .bashrc
+To apply changes in all terminals when they starts, add all aliases in ~/.bash_profile
+source /etc/profile.d/bash_completion.sh
+source <(kubectl completion bash)
+alias k=kubectl
+complete -F __start_kubectl k
+source ~/.bash_profile => to apply the changes in .bash_profile
+By default, Bash completion works only with the full command (kubectl). If you alias kubectl as k, 
+Bash won't automatically apply kubectl's completion to k. The complete -F __start_kubectl k command fixes this by 
+mapping kubectl's completion function to k.

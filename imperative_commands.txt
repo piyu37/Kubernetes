@@ -1,0 +1,62 @@
+--------kubeconfig commands--------------
+kubectl run <pod-name> --image=<img-name> --labels=<"key1=value1,key2=value2"> --port=5701 --env=<"key1=value1" --env=<"key2=value2" -- <arg1> <arg2> ... <argN>
+
+kubectl create deployment <my-dep> --image=<mg-name> --replicas=3
+kubectl scale deployment <my-dep> –replicas=4
+kubectl set image deployment <my-dep> <container-name>=nginx:1.17
+kubectl rollout status deployment <my-dep>
+kubectl rollout history deployment <my-dep>
+kubectl rollout undo deployment <my-dep>
+
+ClusterIP Service: 
+kubectl expose pod <pod-name> --port=6379 --name <svc-name> --dry-run=client -o yaml
+(This will automatically use the pod's labels as selectors)
+Or
+kubectl create service clusterip <svc-name> --tcp=<port>:<targetPort> --dry-run=client -o yaml (This will not use the pods' labels as selectors; instead it will assume selectors as app=redis. You cannot pass in selectors as an option. So it does not work well if your pod has a different label set. So generate the file and modify the selectors before creating the service)
+
+NodePort Service:
+kubectl expose pod <pod-name> --port=80 --name <svc-name> --type=NodePort --dry-run=client -o yaml
+(This will automatically use the pod's labels as selectors, but you cannot specify the node port. You have to generate a definition file and then add the node port in manually before creating the service with the pod.)
+Or
+kubectl create service nodeport <svc-name> --tcp=<port>:<targetPort> --node-port=30080 --dry-run=client -o yaml
+(This will not use the pods' labels as selectors)
+Both the above commands have their own challenges. While one of it cannot accept a selector the other cannot accept a node port. I would recommend going with the `kubectl expose` command. If you need to specify a node port, generate a definition file using the same command and manually input the nodeport before creating the service.
+
+kubectl create job <my-job> --image=<image-name>
+kubectl create cronjob <my-job> --image=<image-name> --schedule="*/1 * * * *" // runs every minute
+The .spec.schedule field is required. The value of that field follows the Cron syntax:
+
+# ┌───────────── minute (0 - 59)
+# │ ┌───────────── hour (0 - 23)
+# │ │ ┌───────────── day of the month (1 - 31)
+# │ │ │ ┌───────────── month (1 - 12)
+# │ │ │ │ ┌───────────── day of the week (0 - 6) (Sunday to Saturday)
+# │ │ │ │ │                                   OR sun, mon, tue, wed, thu, fri, sat
+# │ │ │ │ │ 
+# │ │ │ │ │
+# * * * * *
+For example, 0 3 * * 1 means this task is scheduled to run weekly on a Monday at 3 AM.
+
+kubectl create configmap <my-config> --from-literal=key1=config1 --from-literal=key2=config2 --from-file=path/to/bar --from-env-file=path/to/foo.env
+
+kubectl create secret generic <my-secret> --from-literal=key1=supersecret --from-literal=key2=topsecret
+Decode a Secret Value:
+kubectl get secret my-secret -o jsonpath="{.data.username}" | base64 -d
+
+kubectl create serviceaccount <my-service-account>
+
+kubectl config set-credentials <user-name> --client-certificate <client-certificate-path> --client-key <client-key-path>
+kubectl config set-context <context-name> --cluster=<cluster-name> --user=<user-name> --namespace=<namespace>
+
+kubectl create role <role-name> --namespace=<namespace> --verb=* --resource=pods,services,persistentvolumeclaims --dry-run=client -o yaml > role-developer.yaml
+kubectl create rolebinding <rolebinding-name> --role=<role-name> --user=<user-name> --namespace=<namespace> --dry-run=client -o yaml > rolebinding-developer.yaml
+
+kubectl create clusterrole <role-name> --namespace=<namespace> --verb=* --resource=pods,services,persistentvolumeclaims --dry-run=client -o yaml > role-developer.yaml
+kubectl create clusterrolebinding <rolebinding-name> --clusterrole=<cluster-role-name> --user=<user-name1> --user=<user-name2> --group=group1
+
+for PersistentVolume:
+check docs or using command: k explain --recursive pv
+for PersistentVolumeClaim:
+check docs or using command: k explain --recursive pvc
+for netpol:
+check docs or using command: k explain --recursive netpol
