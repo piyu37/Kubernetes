@@ -19,6 +19,7 @@ This document provides a collection of useful `kubectl` aliases, commands, and b
   - [ServiceAccounts](#serviceaccounts)
   - [Roles and RoleBindings](#roles-and-rolebindings)
   - [ClusterRole and ClusterRoleBinding](#clusterrole-and-clusterrolebinding)
+  - [Ingress Management](#ingress-management)
   - [Network Policies](#network-policies)
   - [PersistentVolume and PersistentVolumeClaim](#persistentvolume-and-persistentvolumeclaim)
 - [Kubeconfig Commands](#kubeconfig-commands)
@@ -170,6 +171,11 @@ kubectl create clusterrole <role-name> --verb=* --resource=pods,services,persist
 kubectl create clusterrolebinding <rolebinding-name> --clusterrole=<cluster-role-name> --user=<user-name1> --user=<user-name2> --group=group1
 ```
 
+### Ingress Management
+```bash
+kubectl create ing <ingress-name> --rule="host1/path1=service1:port1" --rule="host2/path2=service2:port2" --annotation="nginx.ingress.kubernetes.io/rewrite-target=/" $dr > ingress.yaml
+```
+
 ### Network Policies
 For network policies, refer to the Kubernetes documentation or use the following command:
 
@@ -184,6 +190,13 @@ For persistent volumes & persistent volume claims, refer to the Kubernetes docum
 k explain --recursive pv
 k explain --recursive pvc
 ```
+
+### To display only the fields inside spec of a CronJob but excluding spec.jobTemplate, you can use the kubectl explain command along with grep to filter out the unwanted section.
+
+```bash
+k explain cronjob.spec | grep -v "jobTemplate"
+```
+This will show all spec fields except jobTemplate.
 
 ## Kubeconfig Commands
 
