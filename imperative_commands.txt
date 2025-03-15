@@ -54,9 +54,17 @@ kubectl create rolebinding <rolebinding-name> --role=<role-name> --user=<user-na
 kubectl create clusterrole <role-name> --namespace=<namespace> --verb=* --resource=pods,services,persistentvolumeclaims --dry-run=client -o yaml > role-developer.yaml
 kubectl create clusterrolebinding <rolebinding-name> --clusterrole=<cluster-role-name> --user=<user-name1> --user=<user-name2> --group=group1
 
+kubectl create ing <ingress-name> --rule="host1/path1=service1:port1" --rule="host2/path2=service2:port2" --annotation="nginx.ingress.kubernetes.io/rewrite-target=/" $dr > ingress.yaml
+
 for PersistentVolume:
 check docs or using command: k explain --recursive pv
 for PersistentVolumeClaim:
 check docs or using command: k explain --recursive pvc
 for netpol:
 check docs or using command: k explain --recursive netpol
+
+To display only the fields inside spec of a CronJob but excluding spec.jobTemplate, you can use the kubectl explain command along with grep to filter out the unwanted section.
+
+kubectl explain cronjob.spec | grep -v "jobTemplate"
+
+This will show all spec fields except jobTemplate.
