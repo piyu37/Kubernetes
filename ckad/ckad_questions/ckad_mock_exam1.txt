@@ -1,0 +1,48 @@
+Create a ResourceQuota called ckad16-rqc in the namespace ckad16-rqc-ns and enforce a limit of one ResourceQuota 
+for the namespace.
+
+kubectl create namespace ckad16-rqc-ns
+
+student-node ~ ➜  cat << EOF | kubectl apply -f -
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ckad16-rqc
+  namespace: ckad16-rqc-ns
+spec:
+  hard:
+    resourcequotas: "1"
+EOF
+
+--------------------
+
+We have an external webserver running on student-node which is exposed at port 9999.
+We have also created a service called external-webserver-ckad01-svcn that can connect to our local webserver 
+from within the cluster3 but, at the moment, it is not working as expected.
+Fix the issue so that other pods within cluster3 can use external-webserver-ckad01-svcn service to access the webserver.
+
+
+As we can see there is no endpoints specified for the service, hence we won't be able to get any output. 
+Since we can not destroy any k8s object, let's create the endpoint manually for this service as shown below:
+
+student-node ~ ➜  
+Just do ifconfig, from eth0, get inet value which will be - ip: value
+
+student-node ~ ➜ kubectl --context cluster3 apply -f - <<EOF
+apiVersion: v1
+kind: Endpoints
+metadata:
+  # the name here should match the name of the Service
+  name: external-webserver-ckad01-svcn
+subsets:
+  - addresses:
+      - ip: <inet ip>
+    ports:
+      - port: 9999
+EOF
+
+Finally check if the curl test works now:
+student-node ~ ➜  kubectl --context cluster3 run --rm  -i test-curl-pod --image=curlimages/curl --restart=Never -- curl -m 2 external-webserver-ckad01-svcn
+...
+<title>Welcome to nginx!</title>
+...
