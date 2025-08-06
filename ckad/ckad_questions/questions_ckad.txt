@@ -1,0 +1,496 @@
+Update pod app-sec-kff3345 to run as Root user and with the SYS_TIME capability.
+
+Solution
+Add SYS_TIME capability to the container's securityContext.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-sec-kff3345
+  namespace: default
+spec:
+  securityContext:
+    runAsUser: 0
+  containers:
+  - command:
+    - sleep
+    - "4800"
+    image: ubuntu
+    name: ubuntu
+    securityContext:
+     capabilities:
+        add: ["SYS_TIME"]
+
+
+-------------------------------
+
+Apply a label app_type=beta to node controlplane. Create a new deployment called beta-apps with image: nginx and replicas: 3. 
+Set Node Affinity to the deployment to place the PODs on controlplane only.
+
+NodeAffinity: requiredDuringSchedulingIgnoredDuringExecution
+
+Solution
+Add a label to node controlplane:-
+
+kubectl label node controlplane app_type=beta
+
+then create a deployment called beta-apps as follows:-
+
+kubectl create deploy beta-apps --image=nginx --replicas=3 --dry-run=client -oyaml > beta.yaml
+
+Add affinity field under the spec.template.spec section, as follows:-
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: beta-apps
+  name: beta-apps
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: beta-apps
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: beta-apps
+    spec:
+      affinity:
+        nodeAffinity:
+         requiredDuringSchedulingIgnoredDuringExecution:
+           nodeSelectorTerms:
+           - matchExpressions:
+             - key: app_type
+               values: ["beta"]
+               operator: In
+      containers:
+      - image: nginx
+        name: nginx
+
+then run the kubectl create -f beta.yaml to create a deployment resource.
+
+
+-----------------------
+
+There are existing Pods in Namespace space1 and space2 .
+
+We need a new NetworkPolicy named np that restricts all Pods in Namespace space1 to only have outgoing traffic to Pods in Namespace space2 . 
+Incoming traffic not affected.
+
+The NetworkPolicy should still allow outgoing DNS traffic on port 53 TCP and UDP.
+
+Solution
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: np
+  namespace: space1
+spec:
+  podSelector: {} // applies for all pods
+  policyTypes:
+  - Egress
+  egress:
+  - ports:
+    - port: 53
+      protocol: TCP
+    - port: 53
+      protocol: UDP
+  - to:
+     - namespaceSelector:
+        matchLabels:
+         kubernetes.io/metadata.name: space2 // critical for choosing namesapce 
+
+
+-----------------
+k create job neb-new-job  --image=busybox:1.31.0 --namespace=neptune $dr -- /bin/sh -c  'sleep 2 && echo done' > 3.yaml
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  creationTimestamp: null
+  name: neb-new-job
+  namespace: neptune
+spec:
+  parallelism: 2
+  completions: 3
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+       id: awesome-job
+    spec:
+      containers:
+      - command:
+        - /bin/sh
+        - -c
+        - sleep 2 && echo done
+        image: busybox:1.31.0
+        name: neb-new-job-container
+        resources: {}
+      restartPolicy: Never
+status: {}
+
+----------------
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: moon-retain
+  namespace: moon
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: moon-retainer 
+reclaimPolicy: Retain
+
+----------------
+Ques: https://github.com/khgad/kodekloud-k8s-challenges/blob/main/challenge-4/README.md
+
+Create headless service:
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-service
+spec:
+  clusterIP: None
+  type: ClusterIP
+  selector:
+    app: redis-cluster
+  ports:
+  - name: client
+    port: 6379
+    targetPort: 6379
+  - name: gossip
+    port: 16379
+    targetPort: 16379
+
+
+create statefulset resource:
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
+spec:
+  replicas: 6
+  serviceName: redis-cluster-service
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+    spec:
+      containers:
+      - name: redis
+        image: redis:5.0.1-alpine
+        command: ["/conf/update-node.sh", "redis-server", "/conf/redis.conf"]
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+                apiVersion: v1
+        ports:
+          - name: client
+            containerPort: 6379
+          - name: gossip
+            containerPort: 16379
+        volumeMounts:
+          - name: conf
+            mountPath: /conf
+            readOnly: false
+          - name: data
+            mountPath: /data
+            readOnly: false
+      volumes:
+        - name: conf
+          configMap:
+            name: redis-cluster-configmap
+            defaultMode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+---------------------
+Define a Kubernetes custom resource definition (CRD) for a new resource kind called Foo (plural form - foos) in the samplecontroller.k8s.io group.
+
+This CRD should have a version of v1alpha1 with a schema that includes two properties as given below:
+
+
+deploymentName (a string type) and replicas (an integer type with minimum value of 1 and maximum value of 5).
+
+
+
+It should also include a status subresource which enables retrieving and updating the status of Foo object, including the availableReplicas property, which is an integer type.
+The Foo resource should be namespace scoped.
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: foos.samplecontroller.k8s.io
+  annotations:
+    "api-approved.kubernetes.io": "unapproved, experimental-only"
+spec:
+  group: samplecontroller.k8s.io
+  scope: Namespaced
+  names:
+    kind: Foo
+    plural: foos
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        # schema used for validation
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              # Spec for schema goes here !
+              type: object
+              properties:
+                deploymentName:
+                  type: string
+                replicas:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+            status:
+              type: object
+              properties:
+                availableReplicas:
+                  type: integer
+      # subresources for the custom resource
+      subresources:
+        # enables the status subresource
+        status: {}
+
+annotation addition is must. If we don't add then we will get this error:
+The CustomResourceDefinition "foos.samplecontroller.k8s.io" is invalid: metadata.annotations[api-approved.kubernetes.io]: 
+Invalid value: "experimental-only": protected groups must have approval annotation "api-approved.kubernetes.io" \
+with either a URL or a reason starting with "unapproved", see https://github.com/kubernetes/enhancements/pull/1111
+
+-----------
+
+In the ckad-pod-design namespace, we created a pod named custom-nginx that runs the nginx:1.17 image.
+
+Take appropriate actions to update the index.html page of this NGINX container with below value instead of default 
+NGINX welcome page:
+
+Welcome to CKAD mock exams!
+
+NOTE: By default NGINX web server default location is at /usr/share/nginx/html which is located on the default file 
+system of the Linux.
+
+Exec to the pod container and update the index.html file content:
+student-node ~ ➜kubectl exec -it -n ckad-pod-design custom-nginx -- sh
+# echo 'Welcome to CKAD mock exams!' > /usr/share/nginx/html/index.html
+
+----------------
+
+Store the pod names and their ip addresses from the spectra-1267 ns at /root/pod_ips_cka05_svcn where the output 
+is sorted by their IP's.
+
+Please ensure the format as shown below:
+POD_NAME        IP_ADDR
+pod-1           ip-1
+pod-3           ip-2
+pod-2           ip-3
+...
+
+To store all the pod name along with their IP's , we could use imperative command as shown below:
+student-node ~ ➜  kubectl get pods -n spectra-1267 -o=custom-columns='POD_NAME:metadata.name,IP_ADDR:status.podIP' \
+--sort-by=.status.podIP
+
+POD_NAME   IP_ADDR
+pod-12     10.42.0.18
+pod-23     10.42.0.19
+pod-34     10.42.0.20
+pod-21     10.42.0.21
+...
+
+# store the output to /root/pod_ips
+student-node ~ ➜  kubectl get pods -n spectra-1267 -o=custom-columns='POD_NAME:metadata.name,IP_ADDR:status.podIP' \
+--sort-by=.status.podIP > /root/pod_ips_cka05_svcn
+
+-----------------------
+We have created a Network Policy netpol-ckad13-svcn that allows traffic only to specific pods and it 
+allows traffic only from pods with specific labels.
+
+Your task is to edit the policy so that it allows traffic from pods with labels access = allowed.
+
+Do not change the existing rules in the policy.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: netpol-ckad13-svcn
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: kk-app
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+           tier: server
+#add the following in the manifest
+    - podSelector:
+        matchLabels:
+           access: allowed
+
+----------------------------
+We have a Kubernetes namespace called ckad12-ctm-sa-aecs, which contains a service account and a pod. 
+Your task is to modify the pod so that it uses the service account defined in the same namespace.
+
+Additionally, you need to ensure that the pod has access to the API credentials associated with the service 
+account by enabling the automounting feature for the credentials.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ckad12-ctm-nginx-aecs
+  namespace: ckad12-ctm-sa-aecs
+spec:
+  # automountServiceAccountToken: false  *removed to enable automount of creds
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: nginx
+  serviceAccountName: ckad12-my-custom-sa-aecs # using custom sa
+
+-------------------------------
+In the ckad14-sa-projected namespace, configure the ckad14-api-pod Pod to include a projected volume named vault-token.
+Mount the service account token to the container at /var/run/secrets/tokens, with an expiration time of 7000 seconds.
+Additionally, set the intended audience for the token to vault and path to vault-token.
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ckad14-api-pod
+  namespace: ckad14-sa-projected 
+spec:
+  containers:
+  - image: nginx
+    imagePullPolicy: Always
+    name: nginx
+.
+.
+.
+   volumeMounts:                              # Added
+    - mountPath: /var/run/secrets/tokens       # Added
+      name: vault-token                        # Added
+.
+.
+.
+  serviceAccount: ckad14-sa
+  serviceAccountName: ckad14-sa
+  volumes:
+  - name: vault-token                   # Added
+    projected:                          # Added
+      sources:                          # Added
+      - serviceAccountToken:            # Added
+          path: vault-token             # Added
+          expirationSeconds: 7000       # Added
+          audience: vault               # Added
+
+-------------------
+On the cluster1, the team has installed multiple helm charts on a different namespace. 
+By mistake, those deployed resources include one of the vulnerable images called kodekloud/click-counter:latest. 
+Find out the release name and uninstall it.
+
+helm ls -A
+kubectl get deploy -n <NAMESPACE> <DEPLOYMENT-NAME> -o json | jq -r '.spec.template.spec.containers[].image'
+helm uninstall <RELEASE-NAME> -n <NAMESPACE>
+
+------------------------
+We have deployed an application in the green-space namespace. we also deployed the ingress controller and the ingress resource.
+
+
+However, currently, the ingress controller is not working as expected. Inspect the ingress definitions and troubleshoot 
+the issue so that the services are accessible as per the ingress resource definition.
+
+k get pods -n ingress-nginx
+k logs -n ingress-nginx ingress-nginx-controller-5f8964959d-278rc
+
+To check ingress controller is not working, check it's deployment. you can find using k get ns -A 
+
+-------------------------
+Create a Deployment named ckad13-deployment with "two replicas" of nginx image and expose it using a service 
+named ckad13-service.
+Please be noted that service needs to be accessed from both inside and outside the cluster (use port 31080).
+
+To do that create deploy with default port 80. It will not getting created automatically, we have to add it forcefully.
+Then in svc, use port & target port as 80 & node port as 31080
+
+--------------------------
+Create a ClusterRole named healthz-access that allows GET and POST requests to the non-resource endpoint /healthz and 
+all subpaths.
+kubectl create clusterrole healthz-access --non-resource-url=/healthz,/healthz/* --verb=get,post
+
+---------------------------
+Identify the kube api-resources that use api_version=authorization.k8s.io/v1 using kubectl command line interface and 
+store them in /root/api-version.txt on student-node.
+
+kubectl api-resources --api-group=authorization.k8s.io | grep -i authorization.k8s.io/v1  > /root/api-version.txt
+
+----------------------------
+Create a Dockerfile for an application.
+There is a project directory at /home/cloud user/buzz. All the necessary files are in this directory. 
+Create a Dockerfile in /home/cloud _user/buzz.
+Use the busybox: 1.34. 1 image as the baseline for your new image.
+Configure the Dockerfile to place data1. txt from the buzz directory into the resulting container image at /etc/data/mainData.txt.
+Add data2.txt to the container image at /etc/data/data2. txt, and add
+data3. txt to the container image at /etc/data/data3.txt.
+
+Build a container image using your Dockerfile located at /home/cloud user/buzz/Dockerfile. Install Docker on the CLI server, 
+and you can use the service to build the image.
+Give this image the tag buzz:1. You do not need to run a container using this image or push it to any remote repository.
+Save a copy of the image to an archive file located at /home/cloud user/buzz_1. tar.
+
+Dockerfile:
+# Use the busybox:1.34.1 image as base
+FROM busybox:1.34.1
+
+# Create the target directory in the container
+RUN mkdir -p /etc/data
+
+# Copy the necessary files into the container
+COPY data1.txt /etc/data/mainData.txt
+COPY data2.txt /etc/data/data2.txt
+COPY data3.txt /etc/data/data3.txt
+
+docker build -t buzz:1 .
+
+docker save -o buzz_1.tar buzz:1
+
+-------------------
+Create a pod that will be placed on node controlplane. Use nodeSelector and tolerations.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+  nodeSelector:
+    kubernetes.io/hostname: controlplane
+  tolerations:
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Exists"
+    effect: "NoSchedule"
