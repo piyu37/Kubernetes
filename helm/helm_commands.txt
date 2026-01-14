@@ -1,0 +1,52 @@
+* list of all Helm releases installed in the default namespace:
+helm ls
+
+* list all active Helm releases installed in the cluster(all namespaces):
+helm ls -A
+
+* Lists all releases (including uninstalled, failed, superseded, etc.) in current namespaces
+helm ls -a
+
+* Delete the Helm release apiserver
+helm -n team-yellow uninstall apiserver
+
+* Download helm chart
+helm pull --untar <helm-chart-name> // this will download only
+
+* Install
+helm -n <namespace> install <realease-name> <helm-chart-name> // this will download & install
+// --generate-name flag to generate random name of release of helm chart
+// <helm-chart-name> will look like this => chart-name/<deployment-name>
+
+* Install with setting value
+helm -n <namespace> install <realease-name> <helm-chart-name> --set key1=value1,key2=value2,key3=value3
+// e.g --set replicaCount=2, we can set values this way in helm
+
+* Upgrade
+helm upgrade <realease-name> <helm-chart-name>
+
+* rollback
+helm rollback <realease-name>
+
+* search
+helm search hub <helm-chart-name>
+
+* add bitnami helm chart repo
+helm repo add <chart-name> <url> 
+
+* search repo
+helm search repo <repo-name> --versions(optional command versions)
+
+* list all repos
+helm repo list
+
+* update repos to fetch new releases
+helm repo update
+
+* list all possible value settings for the chart
+helm show values bitnami/apache 
+# will show a long list of all possible value-settings
+
+* To check the Helm chart because it can identify errors such as missing or misconfigured values, invalid YAML syntax, 
+and deprecated APIs etc.
+helm lint

@@ -1,18 +1,23 @@
 --------kubeconfig commands--------------
-kubectl run <pod-name> --image=<img-name> --labels=<"key1=value1,key2=value2"> --port=5701 --env=<"key1=value1" --env=<"key2=value2" -- <arg1> <arg2> ... <argN>
+kubectl run <pod-name> --image=<img-name> --labels=<"key1=value1,key2=value2"> --port=570 --expose=true --env=<"key1=value1" --env=<"key2=value2" --command -- <cmd> <arg1> ... <argN>
+--expose=true => will create the service with pod
 
 kubectl create deployment <my-dep> --image=<mg-name> --replicas=3
-kubectl scale deployment <my-dep> –replicas=4
+kubectl scale deployment <my-dep> –-replicas=4
 kubectl set image deployment <my-dep> <container-name>=nginx:1.17
 kubectl rollout status deployment <my-dep>
-kubectl rollout history deployment <my-dep>
-kubectl rollout undo deployment <my-dep>
+kubectl rollout history deployment --revision=3(--revision optional to check the info of revision) <my-dep>
+kubectl rollout undo deployment <my-dep> --to-revision=2(--to-revision optional if we want to undo deploy to specific revision)
+k rollout restart deployment <my-dep>
 
 ClusterIP Service: 
-kubectl expose pod <pod-name> --port=6379 --name <svc-name> --dry-run=client -o yaml
+kubectl expose pod <pod-name> --port=6379 --name <svc-name> --target-port=6379 --dry-run=client -o yaml
 (This will automatically use the pod's labels as selectors)
 Or
-kubectl create service clusterip <svc-name> --tcp=<port>:<targetPort> --dry-run=client -o yaml (This will not use the pods' labels as selectors; instead it will assume selectors as app=redis. You cannot pass in selectors as an option. So it does not work well if your pod has a different label set. So generate the file and modify the selectors before creating the service)
+kubectl create service clusterip <svc-name> --tcp=<port>:<targetPort> --dry-run=client -o yaml 
+(This will not use the pods' labels as selectors; instead it will assume selectors as app=redis. 
+You cannot pass in selectors as an option. So it does not work well if your pod has a different label set. 
+So generate the file and modify the selectors before creating the service)
 
 NodePort Service:
 kubectl expose pod <pod-name> --port=80 --name <svc-name> --type=NodePort --dry-run=client -o yaml
@@ -20,7 +25,11 @@ kubectl expose pod <pod-name> --port=80 --name <svc-name> --type=NodePort --dry-
 Or
 kubectl create service nodeport <svc-name> --tcp=<port>:<targetPort> --node-port=30080 --dry-run=client -o yaml
 (This will not use the pods' labels as selectors)
-Both the above commands have their own challenges. While one of it cannot accept a selector the other cannot accept a node port. I would recommend going with the `kubectl expose` command. If you need to specify a node port, generate a definition file using the same command and manually input the nodeport before creating the service.
+Both the above commands have their own challenges. While one of it cannot accept a selector the other cannot accept a 
+node port. I would recommend going with the `kubectl expose` command. If you need to specify a node port, 
+generate a definition file using the same command and manually input the nodeport before creating the service.
+
+Note: In ques, if it gives something like this: 3333:80, then it means 3333 is port and 80 is taget port.
 
 kubectl create job <my-job> --image=<image-name>
 kubectl create cronjob <my-job> --image=<image-name> --schedule="*/1 * * * *" // runs every minute
@@ -62,6 +71,8 @@ for PersistentVolumeClaim:
 check docs or using command: k explain --recursive pvc
 for netpol:
 check docs or using command: k explain --recursive netpol
+for storageclasses:
+check docs or using command: k explain --recursive sc
 
 To display only the fields inside spec of a CronJob but excluding spec.jobTemplate, you can use the kubectl explain command along with grep to filter out the unwanted section.
 

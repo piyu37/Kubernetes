@@ -1,0 +1,197 @@
+learn about curl/ssh to test our k8 resources working as expected
+
+verifying configmap & env accessible:
+kubectl exec pod1 -- env | grep "TREE1=trauerweide"
+kubectl exec pod1 -- cat /etc/birke/tree
+kubectl exec pod1 -- cat /etc/birke/level
+kubectl exec pod1 -- cat /etc/birke/department
+
+ingressClassName: nginx # k get ingressclass
+after creating ingress resource check how I can access urls
+
+--------------
+kube-apiserver.yaml:
+cat /etc/kubernetes/manifests/kube-apiserver.yaml
+
+Restarted the kubelet service using this command:
+systemctl restart kubelet
+
+Once we make any changes to apiserver, we wait till the apiserver restarted using 
+watch crictl ps
+------------------
+
+Copy all images from the directory '/media' on the controlplane node to '/web' directory on node01
+scp /media/* node01:/web
+
+This command copies all files from the local /media/ directory to the /web directory on a remote host named node01, 
+using scp (Secure Copy Protocol).
+
+------------------
+
+To get only status of pod pod1:
+kubectl describe po pod1 | grep -i status: -A 3 -B 3
+here i stands for case insensitive
+-A stands for print 3 lines after the hit
+-B stands for print 3 lines before the hit
+or
+kubectl get po pod1 -o jsonpath="{.status.phase}"
+
+-----------------
+Decoding secret token
+k get secret <secret> -n <namespace> -o jsonpath="{.data.token}" | base64 -d
+
+Pretty print secret token
+k get secret <secret> -n <namespace> -o jsonpath="{.data.token}" | jq
+
+--------------------
+
+To get the endpoint of the svc:
+k get ep -n <namespace>
+
+---------------------
+
+* To create temperory pod to test something
+kubectl run <pod-name> --rm --image=<image> -i -- curl http://<svc-name.namespace>:<port>
+--rm = automatically delete pod after it exits
+Note: In above example there is no need of -i; the usage of -i is:
+
+kubectl run tmp --rm --image=busybox -i -- sh -c 'read name; echo Hello $name'
+This expects you to input something (like your name).
+Without -i, read will immediately fail because there's no open stdin.
+
+----------------------------
+Extract only the Events: section (and its entries) from kubectl describe <resource-name>
+
+kubectl get events --field-selector involvedObject.name=<resource-name>,type=Warning
+
+-----------------------
+k create cm configmap --form-file=<key1>=<path>
+
+-----------------------
+
+update/add the labels according to label name on pods:
+k label po -l <labelkey>=<labelvalue> <newlabelkey>=<newlabelvalue>
+
+--------------------
+update/add the annotation according label name on pods:
+k annotate po -l <labelkey>=<labelvalue> <newannotatekey>=<newannotatevalue>
+
+--------------------
+Run a Command That Keeps the Container Alive
+command: ["sh", "-c", "while true; do sleep 3600; done"]
+
+--------------------
+what is the difference between 
+while true; do echo $(date -u) Hi I am from Sidecar container >> /var/log/index.html; sleep 5;done
+vs 
+while true; do echo $date Hi I am from Sidecar container > /my-vol/index.html; sleep 5; done
+
+In the first command, while true; do echo $(date -u) Hi I am from Sidecar container >> /var/log/index.html; sleep 5; done, 
+the shell executes the date -u command at every loop iteration to generate the current UTC timestamp, appends the 
+timestamp along with the static message "Hi I am from Sidecar container" into the file /var/log/index.html, and preserves 
+all previous entries using the >> append operator. As a result, over time, the file accumulates a log of timestamped entries.
+
+In contrast, in the second command, 
+while true; do echo $date Hi I am from Sidecar container > /my-vol/index.html; sleep 5; done, 
+the shell treats $date as a variable, not as a command execution. Since the $date variable is typically undefined 
+unless set manually, it will usually be empty. Additionally, the > operator overwrites /my-vol/index.html at each 
+loop iteration, meaning the file always contains only the most recent line, without timestamps and without preserving 
+history. Thus, the first method is correct for building a continuously growing timestamped log file, while 
+the second method incorrectly overwrites the file without meaningful timing information.
+
+---------------------------
+View enabled admission controllers:
+
+kube-apiserver -h | grep enable-admission-plugins
+
+It above command doesn't work, try running this:
+k exec kube-apiserver-controlplane -n kube-system -- kube-apiserver -h | grep enable-admission-plugins
+
+to check enabled & disabled plugins:
+ps -ef | grep kube-apiserver | grep admission-plugins
+
+-----------------------
+To check the container images of deployment:
+kubectl get deploy -n <NAMESPACE> <DEPLOYMENT-NAME> -o json | jq -r '.spec.template.spec.containers[].image'
+
+--------------------
+View the metrics (CPU and Memory) of the node cluster2-node01 and copy the output to the 
+/root/node-metrics file in nodeName, CPU and memory.
+
+kubectl top nodes cluster2-node01 > /root/node-metrics
+
+--------------------
+Create custom columns
+
+kubectl get pods -n spectra-1267 -o=custom-columns='POD_NAME:metadata.name,IP_ADDR:status.podIP' \
+--sort-by=.status.podIP
+
+------------------
+To access pod without using svc:
+kubectl exec <pod-name> -- curl http://<pod-ip>:<port>
+
+To access svc use this:
+for CluserIp
+k exec nginx -- curl http://<svc-name.namespace>:<port>
+or 
+k exec nginx -- curl http://<pod-name>.default.svc.cluster.local:<port>
+or 
+k get ep
+exec nginx -- curl <ep>
+
+for nodeport
+curl http://<INTERNAL-IP>:<NodePort>
+or 
+curl http://<NodeIP>:<NodePort>
+Use EXTERNAL-IP / Node IP
+
+Netpol testing
+e.g. 
+To test netpol changes:
+k run temp-allow --rm -it --image=busybox --labels=criteria=allow -- wget -qO- http://nginx-ckad10-service-svcn:80 --timeout=10
+
+To test redis svc:
+kubectl run temp --rm -it --image=busybox --restart=Never -- /bin/sh -c "nc -zv messaging-service-ckad04-svcn 6379"
+nc (netcat) to test network connectivity
+nc -zv messaging-service-ckad04-svcn 6379 command tells nc to:
+Try connecting to host messaging-service-ckad04-svcn on port 6379
+Don’t send any data (-z)
+Print whether the port is reachable or not (-v)
+
+Ingress testing
+To test ingress path/host working or not, use ingress service from ingress namespace:
+k run temp --rm -it --image=busybox wget -O- --timeout=10 http://ingress-nginx-controller.ingress-nginx.svc.cluster.local/wear
+or wget -O- ingress-nginx-controller.ingress-nginx/wear => this also works 
+Note: Above works when  ingress-nginx-controller svc is clusterIP
+
+If path exist and not host:
+or wget -O- cluster3-node01:30080/wear => if ingress-nginx-controller svc defined as NodePort
+
+where:
+ingress-nginx-controller = service
+ingress-nginx = namespace
+
+If host exist and no path:
+wget --header="host: app-video.localhost" -O- cluster2-node01:30080
+
+----------------------
+Imperative command to set SA in deployment
+kubectl set sa deployment <deployment-name> <sa-name>
+
+----------------------
+If the questions comes that add this pod so that it can send request to diff pod without deleting then we can do these 2 things:
+1. On new pod, update the labels according to what we have in netpol
+2. Add pod label rule in netpol so that this label can also access diff pod
+
+-----------------------
+To check how much cpu/memory pod is using:
+k top pods --sort-by=cpu
+or
+k top pods --sort-by=memory
+-------------
+
+kubectl api-resources --namespaced=true --api-group=rbac.authorization.k8s.io -o name
+---------------------
+From admin to check role which we created for user is working or not:
+
+k auth can-i list pods --as mock-user

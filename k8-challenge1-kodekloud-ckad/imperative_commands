@@ -1,5 +1,0 @@
---------kubeconfig commands--------------
-kubectl config set-credentials martin --client-certificate /root/martin.crt --client-key /root/martin.key
-kubectl config set-context developer --cluster=kubernetes --user=martin --namespace=development
-kubectl create role developer-role --namespace=development --verb=* --resource=pods,services,persistentvolumeclaims --dry-run=client -o yaml > role-developer.yaml
-kubectl create rolebinding developer-rolebinding --role=developer-role --user=martin --namespace=development --dry-run=client -o yaml > rolebinding-developer.yaml

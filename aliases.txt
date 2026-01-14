@@ -1,14 +1,17 @@
 // write script to make it fast or add in .zshrc/.bashrc
-export dr='--dry-run=client -o yaml'
-export now='--grace-period 0 --force'
+1. export dr='--dry-run=client -o yaml' 
+export now='--grace-period 0 --force' // use grace with force otherwise --force may take few secs
 alias k=kubectl
-alias kn='k config set-context --current --namespace'
-alias kaf='k apply -f'
-alias kgp='k get po'
+2. alias kn='k config set-context --current --namespace'
+3. alias kaf='k apply -f'
+4. alias kgp='k get po'
 alias kgs='k get svc'
 alias kc='k config get-contexts'
-alias kg='k get'
-alias ke='k explain --recursive'
+5. alias kg='k get'
+alias kd='k describe'
+6. alias ke='k explain'
+7. alias ker='k explain --recursive'
+8. alias krf='k replace --force --grace-period=0 -f'
 
 
 source ~/.bashrc => to apply the changes in .bashrc
