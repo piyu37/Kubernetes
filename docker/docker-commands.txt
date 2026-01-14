@@ -1,0 +1,52 @@
+Create a new file /root/Dockerfile to build a container image from. It should:
+
+use bash as base
+run ping killercoda.com
+Build the image and tag it as pinger .
+
+Run the image (create a container) named my-ping .
+
+docker build Dockerfile -t piyush/my-app
+// piyush is account name in docker hub and my-app is docker image
+
+podman build -t pinger .
+or
+docker build -t <name1>:<tag1> -t <name2>:<tag2> .
+podman image ls
+
+podman run --name my-ping pinger
+
+----------------------------------
+
+Tag the image, which is currently tagged as pinger , also as local-registry:5000/pinger .
+
+Then push the image into the local registry.
+
+podman tag pinger local-registry:5000/pinger
+
+podman image ls
+
+podman push local-registry:5000/pinger
+
+docker push <image-name>:<tag>
+
+-------------------------
+
+podman logs <container-name>
+
+----------------
+
+docker save -o <file>.tar <image-name>:<tag>
+
+Build a local Dockerfile file and copy the container in OCI format to a specified location as a tar file:
+docker image save --format oci -o /path/to/target/my-oci-image.tar my-oci-image:latest
+
+-----------------
+docker run -it --rm -d -p 8080:80 --name my-container my-image:v0.1
+-------
+docker container stop my-container
+----------
+docker image rm my-image:v0.1
+-----------
+docker image prune -a
+---------------

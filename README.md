@@ -1,37 +1,43 @@
-# Kubernetes Aliases and Commands
-
-This document provides a collection of useful `kubectl` aliases, commands, and best practices to streamline Kubernetes operations.
+# Kubernetes Aliases and Imperative Commands
 
 ## Table of Contents
 
 - [Aliases](#aliases)
-- [Applying Changes](#applying-changes)
+- [Apply Alias Changes](#apply-alias-changes)
 - [Bash Completion](#bash-completion)
 - [Kubectl Commands](#kubectl-commands)
-  - [Pod Management](#pod-management)
-  - [Deployment Management](#deployment-management)
+  - [Pods](#pods)
+  - [Deployments](#deployments)
   - [Services](#services)
     - [ClusterIP Service](#clusterip-service)
     - [NodePort Service](#nodeport-service)
-  - [Job and CronJob Management](#job-and-cronjob-management)
-    - [CronJob Schedule Syntax](#cronjob-schedule-syntax)
+    - [Endpoints](#endpoints)
+  - [Jobs and CronJobs](#jobs-and-cronjobs)
   - [ConfigMaps and Secrets](#configmaps-and-secrets)
   - [ServiceAccounts](#serviceaccounts)
-  - [Roles and RoleBindings](#roles-and-rolebindings)
-  - [ClusterRole and ClusterRoleBinding](#clusterrole-and-clusterrolebinding)
-  - [Ingress Management](#ingress-management)
+  - [RBAC](#rbac)
+  - [Ingress](#ingress)
   - [Network Policies](#network-policies)
-  - [PersistentVolume and PersistentVolumeClaim](#persistentvolume-and-persistentvolumeclaim)
+  - [Storage](#storage)
+  - [Labels & Annotations](#labels--annotations)
+  - [Events & Troubleshooting](#events--troubleshooting)
+  - [Liveness & Readiness Probes](#liveness--readiness-probes)
+  - [Metrics](#metrics)
 - [Kubeconfig Commands](#kubeconfig-commands)
-- [Inspecting Docker Images](#inspecting-docker-images)
+- [Networking Tests (curl / wget / nc)](#networking-tests-curl--wget--nc)
+- [Control Plane Notes](#control-plane-notes)
+- [File Copy Between Nodes](#file-copy-between-nodes)
+- [Inspect Docker Images](#inspect-docker-images)
+
+---
 
 ## Aliases
 
-To speed up `kubectl` operations, add these aliases to your shell configuration file:
+Add these to `~/.bashrc` or `~/.zshrc`:
 
 ```bash
 export dr='--dry-run=client -o yaml'
-export now='--grace-period 0 --force'
+export now='--grace-period 0 --force'  # use grace with force
 
 alias k=kubectl
 alias kn='k config set-context --current --namespace'
@@ -40,26 +46,29 @@ alias kgp='k get po'
 alias kgs='k get svc'
 alias kc='k config get-contexts'
 alias kg='k get'
-alias ke='k explain --recursive'
-```
+alias kd='k describe'
+alias ke='k explain'
+alias ker='k explain --recursive'
+alias krf='k replace --force --grace-period=0 -f'
+````
 
-## Applying Changes
+---
 
-To apply alias changes, run:
+## Apply Alias Changes
 
 ```bash
 source ~/.bashrc
 ```
 
-For persistent changes, add them to `~/.bash_profile`:
+For all new terminals:
 
 ```bash
 source ~/.bash_profile
 ```
 
-## Bash Completion
+---
 
-Enable Bash completion for `kubectl` and aliases:
+## Bash Completion
 
 ```bash
 source /etc/profile.d/bash_completion.sh
@@ -68,15 +77,49 @@ alias k=kubectl
 complete -F __start_kubectl k
 ```
 
+**Why:** kubectl completion doesn’t work automatically for alias `k`.
+
+---
+
 ## Kubectl Commands
 
-### Pod Management
+## Pods
 
 ```bash
-kubectl run <pod-name> --image=<img-name> --labels="key1=value1,key2=value2" --port=5701 --env="key1=value1" --env="key2=value2" -- <arg1> <arg2> ... <argN>
+kubectl run <pod-name> \
+--image=<img-name> \
+--labels="key1=value1,key2=value2" \
+--port=5701 \
+--env="key1=value1" \
+--env="key2=value2" \
+-- <arg1> <arg2>
 ```
 
-### Deployment Management
+Create pod + service:
+
+```bash
+kubectl run <pod-name> \
+--image=<img-name> \
+--labels="key=value" \
+--port=570 \
+--expose=true
+```
+
+Pod status only:
+
+```bash
+kubectl get po pod1 -o jsonpath="{.status.phase}"
+```
+
+Describe status context:
+
+```bash
+kubectl describe po pod1 | grep -i status: -A 3 -B 3
+```
+
+---
+
+## Deployments
 
 ```bash
 kubectl create deployment <my-dep> --image=<img-name> --replicas=3
@@ -84,135 +127,363 @@ kubectl scale deployment <my-dep> --replicas=4
 kubectl set image deployment <my-dep> <container-name>=nginx:1.17
 kubectl rollout status deployment <my-dep>
 kubectl rollout history deployment <my-dep>
+kubectl rollout history deployment <my-dep> --revision=3
 kubectl rollout undo deployment <my-dep>
+kubectl rollout undo deployment <my-dep> --to-revision=2
+k rollout restart deployment <my-dep>
+kubectl set sa deployment <deployment-name> <sa-name>
 ```
 
-### Services
-
-#### ClusterIP Service
+Check deployment images:
 
 ```bash
-kubectl expose pod <pod-name> --port=6379 --name <svc-name> --dry-run=client -o yaml
+kubectl get deploy <dep> -o json | jq -r '.spec.template.spec.containers[].image'
 ```
-This will automatically use the pod's labels as selectors.
 
-Or
+---
+
+## Services
+
+### ClusterIP Service
+
+**Expose pod (recommended – uses pod labels):**
 
 ```bash
-kubectl create service clusterip <svc-name> --tcp=<port>:<targetPort> --dry-run=client -o yaml
+kubectl expose pod <pod-name> \
+--port=6379 \
+--name <svc-name> \
+--dry-run=client -o yaml
 ```
-This will not use the pod's labels as selectors. Instead, it assumes `app=redis` as the selector. Modify the selectors before creating the service.
 
-#### NodePort Service
+**Create service (does NOT use pod labels):**
 
 ```bash
-kubectl expose pod <pod-name> --port=80 --name <svc-name> --type=NodePort --dry-run=client -o yaml
+kubectl create service clusterip <svc-name> \
+--tcp=<port>:<targetPort> \
+--dry-run=client -o yaml
 ```
-This will automatically use the pod's labels as selectors, but you cannot specify the node port.
 
-Or
+> This assumes selector `app=redis`. Modify selector before apply.
+
+---
+
+### NodePort Service
+
+**Expose pod (cannot set nodePort):**
 
 ```bash
-kubectl create service nodeport <svc-name> --tcp=<port>:<targetPort> --node-port=30080 --dry-run=client -o yaml
+kubectl expose pod <pod-name> \
+--port=80 \
+--name <svc-name> \
+--type=NodePort \
+--dry-run=client -o yaml
 ```
-This will not use the pod's labels as selectors.
 
-To specify a node port manually, generate a definition file using `kubectl expose` and modify the node port before applying.
+**Create service (can set nodePort, no selectors):**
 
-### Job and CronJob Management
+```bash
+kubectl create service nodeport <svc-name> \
+--tcp=<port>:<targetPort> \
+--node-port=30080 \
+--dry-run=client -o yaml
+```
+
+> Recommended: use `expose`, edit YAML, then add nodePort.
+
+**Note:**
+`3333:80` → `3333 = port`, `80 = targetPort`
+
+---
+
+### Endpoints
+
+```bash
+kubectl get ep -n <namespace>
+```
+
+---
+
+## Jobs and CronJobs
 
 ```bash
 kubectl create job <my-job> --image=<image-name>
-kubectl create cronjob <my-job> --image=<image-name> --schedule="*/1 * * * *"
+kubectl create cronjob <my-job> \
+--image=<image-name> \
+--schedule="*/1 * * * *"
 ```
 
-#### CronJob Schedule Syntax
-
-The `.spec.schedule` field follows standard Cron syntax:
+Cron format:
 
 ```
-# ┌───────────── minute (0 - 59)
-# │ ┌───────────── hour (0 - 23)
-# │ │ ┌───────────── day of the month (1 - 31)
-# │ │ │ ┌───────────── month (1 - 12)
-# │ │ │ │ ┌───────────── day of the week (0 - 6) (Sunday to Saturday)
-# │ │ │ │ │
-# * * * * *
+* * * * *
+| | | | |
+m h dom mon dow
 ```
-For example, `0 3 * * 1` runs the job weekly on Monday at 3 AM.
 
-### ConfigMaps and Secrets
+Exclude jobTemplate:
 
 ```bash
-kubectl create configmap <my-config> --from-literal=key1=config1 --from-literal=key2=config2 --from-file=path/to/bar --from-env-file=path/to/foo.env
-kubectl create secret generic <my-secret> --from-literal=key1=supersecret --from-literal=key2=topsecret
-
-To decode the secret:
-kubectl get secret my-secret -o jsonpath="{.data.username}" | base64 -d
+kubectl explain cronjob.spec | grep -v jobTemplate
 ```
 
-### ServiceAccounts
+---
+
+## ConfigMaps and Secrets
 
 ```bash
-kubectl create serviceaccount <my-service-account>
+kubectl create configmap <my-config> \
+--from-literal=key1=config1 \
+--from-literal=key2=config2 \
+--from-file=path \
+--from-env-file=foo.env
 ```
-
-### Roles and RoleBindings
 
 ```bash
-kubectl create role <role-name> --namespace=<namespace> --verb=* --resource=pods,services,persistentvolumeclaims --dry-run=client -o yaml > role-developer.yaml
-kubectl create rolebinding <rolebinding-name> --role=<role-name> --user=<user-name> --namespace=<namespace> --dry-run=client -o yaml > rolebinding-developer.yaml
+kubectl create cm configmap --from-file=<key>=<path>
 ```
 
-### ClusterRole and ClusterRoleBinding
+Secrets:
 
 ```bash
-kubectl create clusterrole <role-name> --verb=* --resource=pods,services,persistentvolumeclaims --dry-run=client -o yaml > role-developer.yaml
-kubectl create clusterrolebinding <rolebinding-name> --clusterrole=<cluster-role-name> --user=<user-name1> --user=<user-name2> --group=group1
+kubectl create secret generic <secret> \
+--from-literal=key1=secret
 ```
 
-### Ingress Management
+Decode secret:
+
 ```bash
-kubectl create ing <ingress-name> --rule="host1/path1=service1:port1" --rule="host2/path2=service2:port2" --annotation="nginx.ingress.kubernetes.io/rewrite-target=/" $dr > ingress.yaml
+kubectl get secret <secret> -o jsonpath="{.data.token}" | base64 -d
 ```
 
-### Network Policies
-For network policies, refer to the Kubernetes documentation or use the following command:
+Verify inside pod:
+
+```bash
+kubectl exec pod1 -- env | grep TREE1
+kubectl exec pod1 -- cat /etc/birke/tree
+kubectl exec pod1 -- cat /etc/birke/level
+kubectl exec pod1 -- cat /etc/birke/department
+```
+
+---
+
+## ServiceAccounts
+
+```bash
+kubectl create serviceaccount <sa>
+```
+
+---
+
+## RBAC
+
+```bash
+kubectl create role <role> \
+--namespace=<ns> \
+--verb=* \
+--resource=pods \
+--dry-run=client -o yaml
+```
+
+```bash
+kubectl create rolebinding <rb> \
+--role=<role> \
+--user=<user> \
+--namespace=<ns> \
+--dry-run=client -o yaml
+```
+
+Cluster-wide:
+
+```bash
+kubectl create clusterrole <cr> --verb=* --resource=pods
+kubectl create clusterrolebinding <crb> \
+--clusterrole=<cr> \
+--user=<user> \
+--group=<group>
+```
+
+Permission check:
+
+```bash
+kubectl auth can-i list pods --as mock-user
+```
+
+---
+
+## Ingress
+
+```bash
+kubectl create ing <ingress-name> \
+--rule="host/path=service:port" \
+--annotation="nginx.ingress.kubernetes.io/rewrite-target=/" \
+$dr > ingress.yaml
+```
+
+IngressClass:
+
+```bash
+kubectl get ingressclass
+```
+
+---
+
+## Network Policies
 
 ```bash
 k explain --recursive netpol
 ```
 
-### PersistentVolume and PersistentVolumeClaim
-For persistent volumes & persistent volume claims, refer to the Kubernetes documentation or use the following commands:
+Testing:
+
+```bash
+kubectl run temp --rm -it --image=busybox \
+--labels=criteria=allow -- wget svc:80
+```
+
+Redis test:
+
+```bash
+kubectl run temp --rm -it --image=busybox \
+-- nc -zv redis-svc 6379
+```
+
+---
+
+## Storage
 
 ```bash
 k explain --recursive pv
 k explain --recursive pvc
+k explain --recursive sc
 ```
 
-### To display only the fields inside spec of a CronJob but excluding spec.jobTemplate, you can use the kubectl explain command along with grep to filter out the unwanted section.
+---
+
+## Labels & Annotations
 
 ```bash
-k explain cronjob.spec | grep -v "jobTemplate"
+kubectl label po -l app=nginx env=prod
+kubectl annotate po -l app=nginx owner=teamA
 ```
-This will show all spec fields except jobTemplate.
+
+---
+
+## Events & Troubleshooting
+
+```bash
+kubectl get events \
+--field-selector involvedObject.name=<name>,type=Warning
+```
+
+Keep container alive:
+
+```yaml
+command: ["sh","-c","while true; do sleep 3600; done"]
+```
+
+---
+
+## Liveness & Readiness Probes
+
+Check config:
+
+```bash
+kubectl get pod <pod> -o jsonpath="{.spec.containers[*].readinessProbe}"
+kubectl get pod <pod> -o jsonpath="{.spec.containers[*].livenessProbe}"
+```
+
+Check failures:
+
+```bash
+kubectl describe pod <pod>
+kubectl get events | grep -i probe
+```
+
+Manual test:
+
+```bash
+kubectl run curl --rm -it --image=curlimages/curl \
+-- curl http://pod-ip:port/health
+```
+
+---
+
+## Metrics
+
+```bash
+kubectl top nodes
+kubectl top pods --sort-by=cpu
+kubectl top pods --sort-by=memory
+```
+
+---
 
 ## Kubeconfig Commands
 
-Set up credentials and context for Kubernetes:
-
 ```bash
-kubectl config set-credentials <user-name> --client-certificate <client-certificate-path> --client-key <client-key-path>
-kubectl config set-context <context-name> --cluster=<cluster-name> --user=<user-name> --namespace=<namespace>
+kubectl config set-credentials <user> \
+--client-certificate cert \
+--client-key key
+
+kubectl config set-context <ctx> \
+--cluster=<cluster> \
+--user=<user> \
+--namespace=<ns>
 ```
 
-## Inspecting Docker Images
+---
 
-To check default commands and entrypoints for an image:
+## Networking Tests (curl / wget / nc)
+
+ClusterIP:
 
 ```bash
-docker inspect <image-name> | grep -A5 '"Cmd"'
-docker inspect <image-name> | grep -A5 '"Entrypoint"'
+kubectl exec pod -- curl http://svc.ns:port
 ```
 
+NodePort:
+
+```bash
+curl http://<NodeIP>:<NodePort>
+```
+
+Ingress:
+
+```bash
+wget -O- ingress-nginx-controller.ingress-nginx/wear
+wget --header="host: app.local" http://node:30080
+```
+
+---
+
+## Control Plane Notes
+
+```bash
+cat /etc/kubernetes/manifests/kube-apiserver.yaml
+systemctl restart kubelet
+watch crictl ps
+```
+
+Admission plugins:
+
+```bash
+kubectl exec kube-apiserver-controlplane -n kube-system \
+-- kube-apiserver -h | grep admission
+```
+
+---
+
+## File Copy Between Nodes
+
+```bash
+scp /media/* node01:/web
+```
+
+---
+
+## Inspect Docker Images
+
+```bash
+docker inspect <image> | grep -A5 '"Cmd"'
+docker inspect <image> | grep -A5 '"Entrypoint"'
+```
